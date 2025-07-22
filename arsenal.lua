@@ -29,7 +29,6 @@ MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
 MainFrame.Active = true
 MainFrame.Draggable = true
-
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 16)
 
 local TitleBar = Instance.new("Frame", MainFrame)
@@ -108,35 +107,74 @@ createToggle("Aimbot", "Aim", "FastAimbotOn")
 createToggle("Wall Check", "Aim", "FastWallCheck")
 createToggle("Aimbot (Safe)", "Safe", "SafeAimbotOn")
 createToggle("Wall Check", "Safe", "SafeWallCheck")
-createToggle("ESP", "ESP", "ESPOn")
 
--- ESP Color Dropdown
-local espColorDropdown = Instance.new("TextButton", TabFrames["ESP"])
-espColorDropdown.Size = UDim2.new(0, 140, 0, 35)
-espColorDropdown.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-espColorDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
-espColorDropdown.Font = Enum.Font.GothamBold
-espColorDropdown.TextSize = 14
-espColorDropdown.Text = "ESP Color"
-espColorDropdown.BorderSizePixel = 0
-Instance.new("UICorner", espColorDropdown).CornerRadius = UDim.new(0, 10)
+-- ESP Setup using 2D Box Drawing
+local ESPPDrawings = {}
 
-local colors = {
-	Red = Color3.fromRGB(255, 0, 0),
-	Blue = Color3.fromRGB(0, 0, 255),
-	Green = Color3.fromRGB(0, 255, 0),
-	Yellow = Color3.fromRGB(255, 255, 0),
-	Purple = Color3.fromRGB(128, 0, 128),
-	Rose = Color3.fromRGB(255, 102, 204),
-	Pink = Color3.fromRGB(255, 105, 180)
-}
+local function clearESP()
+	for _, drawing in pairs(ESPPDrawings) do
+		if drawing and drawing.Remove then
+			drawing:Remove()
+		end
+	end
+	ESPPDrawings = {}
+end
 
-espColorDropdown.MouseButton1Click:Connect(function()
-	local items = {}
-	for name in pairs(colors) do table.insert(items, name) end
-	local choice = items[math.random(1, #items)]
-	_G.ESPColor = colors[choice]
-	espColorDropdown.Text = "ESP: " .. choice
+local function updateESP()
+	clearESP()
+	if not _G.ESPOn then return end
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			if not _G.TeamCheck or player.Team ~= LocalPlayer.Team then
+				local part = player.Character.HumanoidRootPart
+				local vector, onScreen = Camera:WorldToViewportPoint(part.Position)
+				if onScreen then
+					local distance = (Camera.CFrame.Position - part.Position).Magnitude
+					local scale = math.clamp(1 / (distance * 0.05), 0.4, 2)
+					local boxWidth, boxHeight = 40 * scale, 60 * scale
+					local boxX = vector.X - boxWidth / 2
+					local boxY = vector.Y - boxHeight / 2
+
+					local box = Drawing.new("Square")
+					box.Size = Vector2.new(boxWidth, boxHeight)
+					box.Position = Vector2.new(boxX, boxY)
+					box.Color = _G.ESPColor
+					box.Filled = true
+					box.Transparency = 0.35
+					box.Visible = true
+
+					table.insert(ESPPDrawings, box)
+				end
+			end
+		end
+	end
+end
+
+local function createESPButton()
+	local button = Instance.new("TextButton", TabFrames["ESP"])
+	button.Size = UDim2.new(0, 140, 0, 35)
+	button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 14
+	button.Text = "ESP"
+	button.BorderSizePixel = 0
+	Instance.new("UICorner", button).CornerRadius = UDim.new(0, 10)
+	button.MouseButton1Click:Connect(function()
+		_G.ESPOn = not _G.ESPOn
+		button.BackgroundColor3 = _G.ESPOn and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(30, 30, 30)
+		updateESP()
+	end)
+end
+createESPButton()
+
+RunService.RenderStepped:Connect(function()
+	if _G.ESPOn then
+		updateESP()
+	else
+		clearESP()
+	end
 end)
 
 -- GUI Toggle
@@ -160,30 +198,11 @@ UIS.InputBegan:Connect(function(input, gp)
 	end
 end)
 
--- ESP WORKING
-RunService.RenderStepped:Connect(function()
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-			local highlight = player.Character:FindFirstChildOfClass("Highlight")
-			if _G.ESPOn then
-				if not highlight then
-					highlight = Instance.new("Highlight", player.Character)
-				end
-				highlight.FillTransparency = 1
-				highlight.OutlineTransparency = 0
-				highlight.OutlineColor = _G.ESPColor
-			else
-				if highlight then highlight:Destroy() end
-			end
-		end
-	end
-end)
-
 -- Aimbot Logic
 local function getClosestTarget(checkWalls)
 	local closest, shortest = nil, math.huge
 	for _, player in pairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Team ~= LocalPlayer.Team and player.Character and player.Character:FindFirstChild("Head") then
+		if player ~= LocalPlayer and (_G.TeamCheck == false or player.Team ~= LocalPlayer.Team) and player.Character and player.Character:FindFirstChild("Head") then
 			local head = player.Character.Head
 			local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
 			if onScreen and (Camera.CFrame.Position - head.Position).Magnitude < shortest then
